@@ -6,7 +6,7 @@ An English word game in the browser. The board shows a word length and a letter,
 
 | Mode | Goal | Timer | Scoring |
 |---|---|---|---|
-| **Sprint** (`#sprint`) | Score as many points as you can | 60 seconds for the whole round | 1 point per letter |
+| **Sprint** (`#sprint`) | Score as many points as you can | 60 seconds for the whole round | 1 point per letter. Unlimited skips |
 | **Survival** (`#survival`) | Keep going as long as you can | A time limit per word (set by difficulty), reset after each correct answer | 1 point per word. Running out of time ends the game |
 
 ## Difficulty
@@ -38,7 +38,7 @@ Share of boards by word length, after the first questions:
 - **Word length:** boards use lengths from 3 to 9 letters.
 - **Any word counts:** answers are checked against the full dictionary, whatever the difficulty.
 - **No repeats:** you can't use the same word twice in one game.
-- **Skips:** every 10 correct answers (10, 20, 30…) earn one skip, in both modes. Unused skips carry over. To use one, press **Skip** (or Esc), or press **Enter twice** with the box empty. In Survival, the next board gets the full time again.
+- **Skips:** Sprint has unlimited skips. In Survival, every 10 correct answers (10, 20, 30…) earn one skip, and unused skips carry over. In both modes, press **Skip** (or Esc), or press **Enter twice** with the box empty. In Survival, the next board gets the full time again.
 - **Every board has an answer:** a board is only dealt when at least 4 words in that difficulty's list fit it.
 - **Best scores:** saved in your browser, separately for each mode and difficulty.
 
