@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Letter Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700;800&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a single departure-board panel, centred; mode tabs on top, flaps, typing tiles, ledger below. Deliberately dark-only. */
+:root {
+  --board: #14171c;
+  --panel: #1d2129;
+  --flap: #262b35;
+  --seam: #0c0e12;
+  --ink: #f3efe3;
+  --muted: #8b93a3;
+  --amber: #ffb84d;
+  --good: #5fd08a;
+  --bad: #ff6b6b;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { min-height: 100%; }
+body {
+  background: var(--board);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 40px;
+}
+.wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 800; font-size: 2rem; letter-spacing: .04em; text-transform: uppercase; margin: 0; }
+h1 span { color: var(--amber); }
+.tagline { color: var(--muted); font-size: .95rem; margin: 0; }
+
+/* mode tabs */
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modes a {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 8px;
+  text-decoration: none; color: var(--muted); border: 2px solid #2c313b; background: transparent;
+}
+.modes a b { font-family: var(--display); font-weight: 700; font-size: 1.3rem; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); }
+.modes a span { font-size: .88rem; }
+.modes a[aria-current="page"] { border-color: var(--amber); background: var(--panel); }
+.modes a[aria-current="page"] b { color: var(--amber); }
+.modes a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+.panel { background: var(--panel); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 1px 0 #ffffff0d inset, 0 20px 40px #00000059; }
+
+/* status row */
+.status { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat .k { font-family: var(--mono); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.stat .v { font-family: var(--display); font-weight: 700; font-size: 1.8rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.stat .v.low { color: var(--bad); }
+.stat:nth-child(2), .stat:nth-child(3) { align-items: center; }
+.stat:last-child { align-items: flex-end; }
+
+/* the two flaps */
+.flaps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.flapbox { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.flapbox .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.flapbox .k.hot { color: var(--amber); }
+.flap {
+  position: relative; width: 100%; max-width: 180px; aspect-ratio: 4 / 5;
+  background: var(--flap); border-radius: 8px; overflow: hidden;
+  display: grid; place-items: center; perspective: 400px;
+}
+.flap::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: var(--seam); transform: translateY(-1px); }
+.flap .ch { font-family: var(--display); font-weight: 800; font-size: clamp(4.5rem, 22vw, 8rem); line-height: 1; color: var(--amber); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.flap.flip .ch { animation: flip .38s cubic-bezier(.3,.7,.4,1); }
+@keyframes flip { 0% { transform: rotateX(90deg); opacity: .2 } 60% { transform: rotateX(-12deg); opacity: 1 } 100% { transform: rotateX(0) } }
+
+.rule { text-align: center; color: var(--muted); font-size: .98rem; margin: 0; text-wrap: balance; }
+.rule b { color: var(--ink); font-weight: 600; }
+
+/* typing tiles */
+.entry { position: relative; display: flex; justify-content: center; }
+.tiles { display: flex; gap: 6px; flex-wrap: nowrap; justify-content: center; max-width: 100%; }
+.tile {
+  width: clamp(28px, 9vw, 46px); aspect-ratio: 5 / 6; border-radius: 5px;
+  background: var(--board); border: 2px solid #343a46;
+  display: grid; place-items: center;
+  font-family: var(--display); font-weight: 700; font-size: clamp(1.1rem, 5.5vw, 1.8rem); text-transform: uppercase;
+  transition: border-color .15s;
+}
+.tile.fixed { color: var(--amber); border-color: #5a4a30; background: #2a2418; }
+.tile.on { border-color: var(--ink); }
+.tile.cur { border-color: var(--amber); }
+.entry.good .tile { border-color: var(--good); color: var(--good); }
+.entry.bad .tiles { animation: shake .32s; }
+.entry.bad .tile { border-color: var(--bad); }
+@keyframes shake { 20%,60% { transform: translateX(-6px) } 40%,80% { transform: translateX(6px) } }
+#guess {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0;
+  font-size: 16px; caret-color: transparent; cursor: text;
+}
+.entry:focus-within .tiles { outline: 2px solid #ffb84d55; outline-offset: 6px; border-radius: 6px; }
+
+.msg { min-height: 1.5em; text-align: center; font-size: 1rem; margin: 0; text-wrap: balance; }
+.msg.good { color: var(--good); }
+.msg.bad { color: var(--bad); }
+.msg.info { color: var(--muted); }
+.msg.alert { color: var(--amber); }
+
+.controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+button {
+  font-family: var(--display); font-weight: 700; font-size: 1.05rem; letter-spacing: .08em; text-transform: uppercase;
+  border-radius: 6px; padding: 10px 18px; cursor: pointer; border: 2px solid transparent;
+}
+.primary { background: var(--amber); color: var(--seam); }
+.primary:hover { filter: brightness(1.07); }
+.ghost { background: transparent; color: var(--ink); border-color: #3a404c; }
+.ghost:hover { border-color: var(--muted); }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+/* settings */
+.settings { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.setting { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.setting .k { font-family: var(--mono); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; background: var(--board); border-radius: 6px; padding: 3px; gap: 3px; }
+.seg button { font-family: var(--body); font-weight: 600; font-size: .85rem; letter-spacing: 0; text-transform: none; padding: 6px 12px; border: 0; background: transparent; color: var(--muted); border-radius: 4px; }
+.seg button[aria-pressed="true"] { background: var(--flap); color: var(--ink); }
+
+/* ledger */
+.ledger h2 { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0 0 10px; }
+.ledger ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ledger li { display: grid; grid-template-columns: 2.4em 4.2em 1fr auto; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #ffffff0f; font-variant-numeric: tabular-nums; }
+.ledger .n { font-family: var(--mono); color: var(--muted); font-size: .8rem; }
+.ledger .cue { font-family: var(--mono); color: var(--amber); font-size: .85rem; }
+.ledger .w { font-family: var(--display); font-weight: 600; font-size: 1.15rem; letter-spacing: .03em; text-transform: uppercase; min-width: 0; overflow-wrap: anywhere; }
+.ledger .w.miss { color: var(--muted); font-weight: 500; text-transform: none; font-family: var(--body); font-size: .95rem; }
+.ledger .pts { font-family: var(--mono); font-size: .9rem; color: var(--good); }
+.ledger .pts.zero { color: var(--muted); }
+.ledger .empty { color: var(--muted); font-size: .95rem; margin: 0; }
+
+@media (max-width: 420px) {
+  .panel { padding: 16px 14px; }
+  .tiles { gap: 4px; }
+  .stat .v { font-size: 1.5rem; }
+  .ledger li { grid-template-columns: 2em 3.8em 1fr auto; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flap.flip .ch, .entry.bad .tiles { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Letter<span>Board</span></h1>
+    <p class="tagline">Make a word that fits the board.</p>
+  </header>
+
+  <nav class="modes" aria-label="Game mode">
+    <a href="#sprint" data-mode="sprint"><b>Sprint</b><span>Most points in 60 seconds</span></a>
+    <a href="#survival" data-mode="survival"><b>Survival</b><span>15 seconds for every word</span></a>
+  </nav>
+
+  <section class="panel" aria-label="Game">
+    <div class="status">
+      <div class="stat"><span class="k">Question</span><span class="v" id="qnum">0</span></div>
+      <div class="stat"><span class="k" id="scoreLabel">Score</span><span class="v" id="score">0</span></div>
+      <div class="stat"><span class="k">Time</span><span class="v" id="time">60</span></div>
+      <div class="stat"><span class="k">Best</span><span class="v" id="best">0</span></div>
+    </div>
+
+    <div class="flaps">
+      <div class="flapbox"><span class="k">Letters</span><div class="flap" id="flapLen"><span class="ch" id="len">5</span></div></div>
+      <div class="flapbox"><span class="k" id="letterLabel">Starts with</span><div class="flap" id="flapLet"><span class="ch" id="let">S</span></div></div>
+    </div>
+
+    <p class="rule" id="rule">Type any <b>5-letter</b> word that starts with <b>S</b>.</p>
+
+    <div class="entry" id="entry">
+      <div class="tiles" id="tiles" aria-hidden="true"></div>
+      <input id="guess" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Your word" disabled>
+    </div>
+
+    <p class="msg info" id="msg" aria-live="polite">Loading the dictionary…</p>
+
+    <div class="controls">
+      <button class="primary" id="startBtn" disabled>Start</button>
+      <button class="ghost" id="skipBtn" disabled>Skip</button>
+    </div>
+
+    <div class="settings">
+      <div class="setting"><span class="k">Word length</span>
+        <div class="seg" id="diffSeg" role="group" aria-label="Word length">
+          <button data-v="easy" aria-pressed="false">3–5</button>
+          <button data-v="normal" aria-pressed="true">4–7</button>
+          <button data-v="hard" aria-pressed="false">6–9</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ledger" aria-label="This game">
+    <h2>This game</h2>
+    <div id="ledger"><p class="empty">Your words appear here.</p></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const MODES = {
+    sprint:   { time: 60, perWord: false, skip: true,  scoreLabel: 'Score', bestUnit: 'points',
+                start: 'Start 60-second round', help: 'Score one point per letter. Questions 1–20 start with the letter; after that the letter can be anywhere.' },
+    survival: { time: 15, perWord: true,  skip: false, scoreLabel: 'Words', bestUnit: 'words',
+                start: 'Start survival', help: 'Answer each board within 15 seconds. Questions 1–20 start with the letter; after that the letter can be anywhere.' },
+  };
+  const RANGES = { easy: [3, 5], normal: [4, 7], hard: [6, 9] };
+  const ANYWHERE_AFTER = 20; // questions 1–20 use the first letter; from question 21 the position is random
+  const MIN_COMMON = 4;      // only deal boards with at least this many everyday answers
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    qnum: $('qnum'), score: $('score'), scoreLabel: $('scoreLabel'), time: $('time'), best: $('best'),
+    len: $('len'), let: $('let'), flapLen: $('flapLen'), flapLet: $('flapLet'), letterLabel: $('letterLabel'),
+    rule: $('rule'), tiles: $('tiles'), entry: $('entry'), guess: $('guess'), msg: $('msg'),
+    startBtn: $('startBtn'), skipBtn: $('skipBtn'), ledger: $('ledger'), diffSeg: $('diffSeg'),
+    modeLinks: document.querySelectorAll('.modes a'),
+  };
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+
+  let dict = null;   // Set of every accepted word
+  let common = null; // { length: [words] } everyday words, used to deal boards and give hints
+  const S = {
+    mode: 'sprint', diff: store.get('lb-diff', 'normal'),
+    len: 5, letter: 's', pos: 0, q: 0, score: 0, left: 60, playing: false,
+    used: new Set(), log: [], timer: null, lock: false,
+  };
+  const M = () => MODES[S.mode];
+  const bestKey = () => `lb-best-${S.mode}-${S.diff}`;
+  const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+
+  // ---------- dealing ----------
+  const fits = (w, L, c, p) => w.length === L && w[p] === c;
+  const answers = (L, c, p, pool) => pool.filter(w => fits(w, L, c, p));
+
+  function deal() {
+    S.q++;
+    const anywhere = S.q > ANYWHERE_AFTER;
+    const [lo, hi] = RANGES[S.diff];
+    for (let tries = 0; tries < 300; tries++) {
+      const L = lo + Math.floor(Math.random() * (hi - lo + 1));
+      const pool = common[L] || [];
+      if (!pool.length) continue;
+      // take the letter from a real word, so common letters come up more often but every board is solvable
+      const w = pool[Math.floor(Math.random() * pool.length)];
+      const p = anywhere ? Math.floor(Math.random() * L) : 0;
+      const c = w[p];
+      if (c === S.letter && L === S.len && p === S.pos) continue;
+      if (answers(L, c, p, pool).filter(x => !S.used.has(x)).length >= MIN_COMMON) {
+        S.len = L; S.letter = c; S.pos = p; return;
+      }
+    }
+  }
+
+  // ---------- typing ----------
+  // Lay the typed letters into the slots around the printed letter. Players may type the printed letter or skip it.
+  function compose() {
+    const v = els.guess.value.toLowerCase().replace(/[^a-z]/g, '');
+    const out = [];
+    let i = 0;
+    while (i < v.length || out.length === S.pos) {
+      if (out.length === S.pos) {
+        out.push(S.letter);
+        if (v[i] === S.letter) i++;
+        continue;
+      }
+      out.push(v[i++]);
+    }
+    return { out, filled: Math.min(v.length, S.len) };
+  }
+
+  function currentWord() {
+    // if the player typed the whole word themselves, trust that spelling
+    const raw = els.guess.value.toLowerCase().replace(/[^a-z]/g, '');
+    if (raw.length === S.len && raw[S.pos] === S.letter) return raw;
+    return compose().out.join('');
+  }
+
+  // ---------- rendering ----------
+  function flip(el) { el.classList.remove('flip'); void el.offsetWidth; el.classList.add('flip'); }
+
+  function boardText() {
+    const L = S.letter.toUpperCase();
+    return S.pos === 0
+      ? `Type any <b>${S.len}-letter</b> word that starts with <b>${L}</b>.`
+      : `Type any <b>${S.len}-letter</b> word with <b>${L}</b> as the <b>${ordinal(S.pos + 1)}</b> letter.`;
+  }
+
+  function renderBoard(animate) {
+    els.len.textContent = S.len;
+    els.let.textContent = S.letter.toUpperCase();
+    els.letterLabel.textContent = S.pos === 0 ? 'Starts with' : `${ordinal(S.pos + 1)} letter`;
+    els.letterLabel.classList.toggle('hot', S.pos !== 0);
+    els.rule.innerHTML = boardText();
+    if (animate) { flip(els.flapLen); setTimeout(() => flip(els.flapLet), 90); }
+    renderTiles();
+  }
+
+  function renderTiles() {
+    const { out } = compose();
+    const typedSlots = out.length; // slots already holding something (incl. printed letter if reached)
+    const n = Math.max(S.len, out.length);
+    // cursor sits on the first empty slot that is not the printed one
+    let cur = typedSlots; if (cur === S.pos) cur++;
+    let html = '';
+    for (let i = 0; i < n; i++) {
+      const fixed = i === S.pos;
+      const ch = fixed ? S.letter : (out[i] || '');
+      const cls = ['tile'];
+      if (fixed) cls.push('fixed'); else if (ch) cls.push('on');
+      if (!fixed && i === cur && S.playing) cls.push('cur');
+      html += `<div class="${cls.join(' ')}">${ch}</div>`;
+    }
+    els.tiles.innerHTML = html;
+  }
+
+  function say(text, kind) { els.msg.textContent = text; els.msg.className = `msg ${kind}`; }
+
+  function renderStats() {
+    els.qnum.textContent = S.q;
+    els.scoreLabel.textContent = M().scoreLabel;
+    els.score.textContent = S.score;
+    els.time.textContent = S.left;
+    els.time.classList.toggle('low', S.playing && S.left <= (M().perWord ? 5 : 10));
+    els.best.textContent = store.get(bestKey(), 0);
+  }
+
+  function renderLedger() {
+    if (!S.log.length) { els.ledger.innerHTML = '<p class="empty">Your words appear here.</p>'; return; }
+    els.ledger.innerHTML = '<ol>' + S.log.slice().reverse().map(e => {
+      const cue = `${e.len}·${e.letter.toUpperCase()}${e.pos ? '@' + (e.pos + 1) : ''}`;
+      const right = e.word
+        ? `<span class="w">${e.word}</span><span class="pts">+${S.mode === 'sprint' ? e.word.length : 1}</span>`
+        : `<span class="w miss">${e.why}. Could be: ${e.hints.join(', ')}</span><span class="pts zero">0</span>`;
+      return `<li><span class="n">Q${e.q}</span><span class="cue">${cue}</span>${right}</li>`;
+    }).join('') + '</ol>';
+  }
+
+  function hintsFor() {
+    const pool = answers(S.len, S.letter, S.pos, common[S.len] || []).filter(x => !S.used.has(x));
+    return pool.sort(() => Math.random() - .5).slice(0, 3).map(x => x.toUpperCase());
+  }
+
+  // ---------- play ----------
+  function idle() {
+    clearInterval(S.timer); S.playing = false; S.lock = false;
+    els.guess.disabled = true; els.skipBtn.disabled = true;
+    els.skipBtn.hidden = !M().skip;
+    els.startBtn.textContent = M().start;
+  }
+
+  function start() {
+    if (!dict) return;
+    S.score = 0; S.q = 0; S.used = new Set(); S.log = []; S.playing = true; S.lock = false;
+    S.len = 0; S.letter = ''; S.pos = 0;
+    S.left = M().time;
+    clearInterval(S.timer);
+    S.timer = setInterval(tick, 1000);
+    els.guess.disabled = false; els.skipBtn.disabled = !M().skip; els.skipBtn.hidden = !M().skip;
+    els.startBtn.textContent = 'Restart';
+    els.guess.value = '';
+    deal(); renderBoard(true); renderStats(); renderLedger();
+    say('Go! Press Enter to submit.', 'info');
+    els.guess.focus();
+  }
+
+  function tick() {
+    S.left--;
+    renderStats();
+    if (S.left <= 0) end(true);
+  }
+
+  function end(timedOut) {
+    let note = '';
+    if (M().perWord && timedOut) {
+      const hints = hintsFor();
+      S.log.push({ q: S.q, len: S.len, letter: S.letter, pos: S.pos, word: null, why: 'Out of time', hints });
+      note = ` You could have played ${hints.join(', ')}.`;
+    }
+    idle();
+    els.startBtn.textContent = 'Play again';
+    const best = store.get(bestKey(), 0);
+    const unit = S.score === 1 ? M().bestUnit.slice(0, -1) : M().bestUnit;
+    if (S.score > best) { store.set(bestKey(), S.score); say(`Time! New best: ${S.score} ${unit}.${note}`, 'good'); }
+    else say(`Time! You scored ${S.score} ${unit}.${note}`, 'info');
+    renderStats(); renderTiles(); renderLedger();
+  }
+
+  function reject(text) {
+    say(text, 'bad');
+    els.entry.classList.remove('bad'); void els.entry.offsetWidth; els.entry.classList.add('bad');
+  }
+
+  function submit() {
+    if (!S.playing || S.lock) return;
+    const w = currentWord();
+    if (w.length !== S.len) return reject(`That's ${w.length} letter${w.length === 1 ? '' : 's'}. You need ${S.len}.`);
+    if (w[S.pos] !== S.letter) return reject(`The ${ordinal(S.pos + 1)} letter must be ${S.letter.toUpperCase()}.`);
+    if (S.used.has(w)) return reject(`You already used ${w.toUpperCase()} this game.`);
+    if (!dict.has(w)) return reject(`${w.toUpperCase()} isn't in the dictionary. Try another word.`);
+    S.used.add(w);
+    S.score += S.mode === 'sprint' ? w.length : 1;
+    S.log.push({ q: S.q, len: S.len, letter: S.letter, pos: S.pos, word: w });
+    if (M().perWord) S.left = M().time;
+    say(`${w.toUpperCase()}: +${S.mode === 'sprint' ? w.length : 1}`, 'good');
+    els.entry.classList.add('good');
+    S.lock = true;
+    renderStats(); renderLedger();
+    setTimeout(() => { els.entry.classList.remove('good'); S.lock = false; if (S.playing) next(); }, 260);
+  }
+
+  function next() {
+    els.guess.value = '';
+    deal(); renderBoard(true); renderStats();
+    if (S.q === ANYWHERE_AFTER + 1) say('Question 21: from now on the letter can be in any position. Watch the gold tile.', 'alert');
+  }
+
+  function skip() {
+    if (!S.playing || !M().skip || S.lock) return;
+    const hints = hintsFor();
+    S.log.push({ q: S.q, len: S.len, letter: S.letter, pos: S.pos, word: null, why: 'Skipped', hints });
+    say(`Skipped. You could have played ${hints.join(', ')}.`, 'info');
+    renderLedger(); next(); els.guess.focus();
+  }
+
+  // ---------- mode + settings ----------
+  function setMode(mode) {
+    if (!MODES[mode]) mode = 'sprint';
+    S.mode = mode;
+    els.modeLinks.forEach(a => { if (a.dataset.mode === mode) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    idle();
+    S.q = 0; S.score = 0; S.log = []; S.used = new Set(); S.left = M().time;
+    if (dict) { deal(); S.q = 0; renderBoard(true); say(M().help, 'info'); }
+    renderStats(); renderLedger();
+  }
+
+  const diffSync = () => els.diffSeg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.diff)));
+  diffSync();
+  els.diffSeg.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.v === S.diff) return;
+    S.diff = b.dataset.v; store.set('lb-diff', S.diff); diffSync();
+    setMode(S.mode);
+    if (S.playing === false && dict) say('Word length changed. Press Start when ready.', 'info');
+  });
+
+  window.addEventListener('hashchange', () => setMode(location.hash.slice(1)));
+
+  // ---------- wire up ----------
+  els.guess.addEventListener('input', () => {
+    const clean = els.guess.value.replace(/[^a-zA-Z]/g, '').slice(0, S.len + 3);
+    if (clean !== els.guess.value) els.guess.value = clean;
+    els.entry.classList.remove('bad');
+    renderTiles();
+  });
+  els.guess.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(); }
+    else if (e.key === 'Escape' && S.playing && M().skip) { e.preventDefault(); skip(); }
+  });
+  els.startBtn.addEventListener('click', start);
+  els.skipBtn.addEventListener('click', skip);
+
+  setMode(location.hash.slice(1));
+
+  fetch('words.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(data => {
+    common = {}; dict = new Set();
+    for (const [L, s] of Object.entries(data.common)) { common[L] = s.split(' '); common[L].forEach(w => dict.add(w)); }
+    for (const s of Object.values(data.all)) s.split(' ').forEach(w => dict.add(w));
+    deal(); S.q = 0; renderBoard(false); renderStats();
+    els.startBtn.disabled = false;
+    say(M().help, 'info');
+  }).catch(() => say('The dictionary did not load. Reload the page to try again.', 'bad'));
+})();
+</script>
+
+</body>
+</html>
