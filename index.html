@@ -123,6 +123,14 @@ button {
 button:disabled { opacity: .4; cursor: default; }
 button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
+/* difficulty */
+.levels { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.levels .k { font-family: var(--mono); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; background: var(--board); border-radius: 6px; padding: 3px; gap: 3px; }
+.seg button { font-family: var(--body); font-weight: 600; font-size: .9rem; letter-spacing: 0; text-transform: none; padding: 7px 14px; border: 0; background: transparent; color: var(--muted); border-radius: 4px; }
+.seg button[aria-pressed="true"] { background: var(--flap); color: var(--ink); }
+.levelnote { margin: 0; color: var(--muted); font-size: .88rem; text-align: center; text-wrap: balance; max-width: 46ch; }
+
 
 /* ledger */
 .ledger h2 { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0 0 10px; }
@@ -186,6 +194,16 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
       <button class="primary" id="startBtn" disabled>Start</button>
       <button class="ghost" id="skipBtn" disabled>Skip</button>
     </div>
+
+    <div class="levels">
+      <span class="k">Difficulty</span>
+      <div class="seg" id="levelSeg" role="group" aria-label="Difficulty">
+        <button data-v="easy" aria-pressed="false">Easy</button>
+        <button data-v="advanced" aria-pressed="true">Advanced</button>
+        <button data-v="hard" aria-pressed="false">Hard</button>
+      </div>
+      <p class="levelnote" id="levelNote"></p>
+    </div>
   </section>
 
   <section class="ledger" aria-label="This game">
@@ -197,14 +215,20 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 <script>
 (() => {
   const MODES = {
-    sprint:   { time: 60, perWord: false, skip: true,  scoreLabel: 'Score', bestUnit: 'points',
-                start: 'Start 60-second round', help: 'Score one point per letter. Questions 1–20 start with the letter; after that the letter can be anywhere.' },
-    survival: { time: 15, perWord: true,  skip: false, scoreLabel: 'Words', bestUnit: 'words',
-                start: 'Start survival', help: 'Answer each board within 15 seconds. Questions 1–20 start with the letter; after that the letter can be anywhere.' },
+    sprint:   { perWord: false, skip: true,  scoreLabel: 'Score', bestUnit: 'points', start: 'Start 60-second round' },
+    survival: { perWord: true,  skip: false, scoreLabel: 'Words', bestUnit: 'words',  start: 'Start survival' },
   };
-  const LENGTHS = [3, 9]; // boards use any word length from 3 to 9
+  // Each level deals boards by picking one random word from its list and reading its length and letter,
+  // so boards follow that list's word distribution.
+  const LEVELS = {
+    easy:     { survival: 25, note: 'Boards follow how often words are used in everyday English, so short words come up most.' },
+    advanced: { survival: 20, note: 'Boards follow the 30,000-word everyday list. Questions 1–5 use up to 5 letters, 6–10 up to 6, 11–15 up to 7, then anything from 3 to 9.' },
+    hard:     { survival: 15, note: 'Boards follow all 72,000 accepted words, rare ones included, so long words come up most.' },
+  };
+  const SPRINT_TIME = 60;
   const ANYWHERE_AFTER = 20; // questions 1–20 use the first letter; from question 21 the position is random
-  const MIN_COMMON = 4;      // only deal boards with at least this many everyday answers
+  const MIN_ANSWERS = 4;     // only deal boards with at least this many answers in the level's list
+  const advancedCap = q => q <= 5 ? 5 : q <= 10 ? 6 : q <= 15 ? 7 : 9;
 
   const $ = id => document.getElementById(id);
   const els = {
@@ -212,6 +236,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     len: $('len'), let: $('let'), flapLen: $('flapLen'), flapLet: $('flapLet'), letterLabel: $('letterLabel'),
     rule: $('rule'), tiles: $('tiles'), entry: $('entry'), guess: $('guess'), msg: $('msg'),
     startBtn: $('startBtn'), skipBtn: $('skipBtn'), ledger: $('ledger'),
+    levelSeg: $('levelSeg'), levelNote: $('levelNote'),
     modeLinks: document.querySelectorAll('.modes a'),
   };
 
@@ -220,37 +245,93 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
   };
 
-  let dict = null;   // Set of every accepted word
-  let common = null; // { length: [words] } everyday words, used to deal boards and give hints
+  let dict = null; // Set of every accepted word (answers are always checked against this)
+  let P = null;    // per-level word lists, built when words.json loads
   const S = {
-    mode: 'sprint',
-    len: 5, letter: 's', pos: 0, q: 0, score: 0, left: 60, playing: false,
+    mode: 'sprint', level: LEVELS[store.get('lb-level', '')] ? store.get('lb-level', '') : 'advanced',
+    len: 5, letter: 's', pos: 0, q: 0, score: 0, left: SPRINT_TIME, playing: false,
     used: new Set(), log: [], timer: null, lock: false,
   };
   const M = () => MODES[S.mode];
-  const bestKey = () => `lb-best-${S.mode}`;
+  const roundTime = () => S.mode === 'survival' ? LEVELS[S.level].survival : SPRINT_TIME;
+  const bestKey = () => `lb-best-${S.mode}-${S.level}`;
   const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+  const helpText = () => (S.mode === 'sprint'
+    ? 'Score one point per letter in 60 seconds.'
+    : `Answer each board within ${roundTime()} seconds.`) +
+    ' Questions 1–20 start with the letter; after that the letter can be anywhere.';
+
+  // ---------- word lists ----------
+  // count how many words in a list fit each (length, position, letter) board
+  function indexBoards(list) {
+    const m = new Map();
+    for (const w of list) for (let p = 0; p < w.length; p++) {
+      const k = w.length + w[p] + p; m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }
+
+  function buildLists(data) {
+    dict = new Set();
+    const split = part => Object.entries(data[part] || {}).flatMap(([L, s]) => +L >= 3 && +L <= 9 ? s.split(' ') : []);
+    for (const part of ['common', 'all']) for (const s of Object.values(data[part])) s.split(' ').forEach(w => dict.add(w));
+
+    // Easy: weighted by real-world usage
+    const easy = [], cum = []; let total = 0;
+    for (const item of split('freq')) {
+      const i = item.lastIndexOf(':'); const w = item.slice(0, i);
+      total += +item.slice(i + 1); easy.push(w); cum.push(total);
+    }
+    const freqRank = new Map(easy.map((w, i) => [w, cum[i] - (i ? cum[i - 1] : 0)]));
+
+    // Advanced: everyday list, sorted by length so "up to N letters" is a prefix of the array
+    const common = split('common').sort((a, b) => a.length - b.length);
+    const capEnd = {}; for (let L = 3; L <= 9; L++) capEnd[L] = common.findIndex(w => w.length > L) === -1 ? common.length : common.findIndex(w => w.length > L);
+
+    // Hard: every accepted word
+    const all = common.concat(split('all'));
+
+    P = {
+      easy:     { list: easy, cum, total, idx: indexBoards(easy), freq: freqRank },
+      advanced: { list: common, capEnd, idx: indexBoards(common) },
+      hard:     { list: all, idx: indexBoards(all) },
+      commonSet: new Set(common),
+    };
+  }
+
+  const rand = n => Math.floor(Math.random() * n);
+
+  function pickWord() {
+    const lv = P[S.level];
+    if (S.level === 'easy') {
+      const r = Math.random() * lv.total;
+      let lo = 0, hi = lv.cum.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (lv.cum[mid] > r) hi = mid; else lo = mid + 1; }
+      return lv.list[lo];
+    }
+    if (S.level === 'advanced') return lv.list[rand(lv.capEnd[advancedCap(S.q)])];
+    return lv.list[rand(lv.list.length)];
+  }
 
   // ---------- dealing ----------
   const fits = (w, L, c, p) => w.length === L && w[p] === c;
-  const answers = (L, c, p, pool) => pool.filter(w => fits(w, L, c, p));
+
+  function openAnswers(L, c, p) {
+    let n = P[S.level].idx.get(L + c + p) || 0;
+    for (const u of S.used) if (fits(u, L, c, p)) n--;
+    return n;
+  }
 
   function deal() {
     S.q++;
     const anywhere = S.q > ANYWHERE_AFTER;
-    const [lo, hi] = LENGTHS;
     for (let tries = 0; tries < 300; tries++) {
-      const L = lo + Math.floor(Math.random() * (hi - lo + 1));
-      const pool = common[L] || [];
-      if (!pool.length) continue;
-      // take the letter from a real word, so common letters come up more often but every board is solvable
-      const w = pool[Math.floor(Math.random() * pool.length)];
-      const p = anywhere ? Math.floor(Math.random() * L) : 0;
+      const w = pickWord();
+      const L = w.length;
+      const p = anywhere ? rand(L) : 0;
       const c = w[p];
       if (c === S.letter && L === S.len && p === S.pos) continue;
-      if (answers(L, c, p, pool).filter(x => !S.used.has(x)).length >= MIN_COMMON) {
-        S.len = L; S.letter = c; S.pos = p; return;
-      }
+      if (openAnswers(L, c, p) >= MIN_ANSWERS) { S.len = L; S.letter = c; S.pos = p; return; }
     }
   }
 
@@ -338,9 +419,20 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     }).join('') + '</ol>';
   }
 
+  // Suggest answers the player is likely to know: the most-used words on Easy, everyday words otherwise.
   function hintsFor() {
-    const pool = answers(S.len, S.letter, S.pos, common[S.len] || []).filter(x => !S.used.has(x));
-    return pool.sort(() => Math.random() - .5).slice(0, 3).map(x => x.toUpperCase());
+    const ok = w => fits(w, S.len, S.letter, S.pos) && !S.used.has(w);
+    const shuffle = a => a.sort(() => Math.random() - .5);
+    let pick;
+    if (S.level === 'easy') {
+      const f = P.easy.freq;
+      pick = P.easy.list.filter(ok).sort((a, b) => f.get(b) - f.get(a)).slice(0, 3);
+    } else {
+      const everyday = shuffle(P.advanced.list.filter(ok));
+      pick = everyday.length >= 3 ? everyday.slice(0, 3)
+        : everyday.concat(shuffle(P.hard.list.filter(w => ok(w) && !P.commonSet.has(w)))).slice(0, 3);
+    }
+    return pick.map(x => x.toUpperCase());
   }
 
   // ---------- play ----------
@@ -355,7 +447,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     if (!dict) return;
     S.score = 0; S.q = 0; S.used = new Set(); S.log = []; S.playing = true; S.lock = false;
     S.len = 0; S.letter = ''; S.pos = 0;
-    S.left = M().time;
+    S.left = roundTime();
     clearInterval(S.timer);
     S.timer = setInterval(tick, 1000);
     els.guess.disabled = false; els.skipBtn.disabled = !M().skip; els.skipBtn.hidden = !M().skip;
@@ -403,7 +495,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     S.used.add(w);
     S.score += S.mode === 'sprint' ? w.length : 1;
     S.log.push({ q: S.q, len: S.len, letter: S.letter, pos: S.pos, word: w });
-    if (M().perWord) S.left = M().time;
+    if (M().perWord) S.left = roundTime();
     say(`${w.toUpperCase()}: +${S.mode === 'sprint' ? w.length : 1}`, 'good');
     els.entry.classList.add('good');
     S.lock = true;
@@ -431,10 +523,23 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     S.mode = mode;
     els.modeLinks.forEach(a => { if (a.dataset.mode === mode) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     idle();
-    S.q = 0; S.score = 0; S.log = []; S.used = new Set(); S.left = M().time;
-    if (dict) { deal(); S.q = 0; renderBoard(true); say(M().help, 'info'); }
-    renderStats(); renderLedger();
+    S.q = 0; S.score = 0; S.log = []; S.used = new Set(); S.left = roundTime();
+    if (P) { deal(); S.q = 0; renderBoard(true); say(helpText(), 'info'); }
+    renderLevel(); renderStats(); renderLedger();
   }
+
+  function renderLevel() {
+    els.levelSeg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.level)));
+    const lv = LEVELS[S.level];
+    els.levelNote.textContent = `${lv.note} Survival: ${lv.survival} seconds per word.`;
+    document.querySelector('.modes a[data-mode="survival"] span').textContent = `${lv.survival} seconds for every word`;
+  }
+
+  els.levelSeg.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.v === S.level) return;
+    S.level = b.dataset.v; store.set('lb-level', S.level);
+    setMode(S.mode);
+  });
 
   window.addEventListener('hashchange', () => setMode(location.hash.slice(1)));
 
@@ -455,12 +560,10 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   setMode(location.hash.slice(1));
 
   fetch('words.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(data => {
-    common = {}; dict = new Set();
-    for (const [L, s] of Object.entries(data.common)) { common[L] = s.split(' '); common[L].forEach(w => dict.add(w)); }
-    for (const s of Object.values(data.all)) s.split(' ').forEach(w => dict.add(w));
+    buildLists(data);
     deal(); S.q = 0; renderBoard(false); renderStats();
     els.startBtn.disabled = false;
-    say(M().help, 'info');
+    say(helpText(), 'info');
   }).catch(() => say('The dictionary did not load. Reload the page to try again.', 'bad'));
 })();
 </script>

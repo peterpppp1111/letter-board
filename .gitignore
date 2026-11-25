@@ -1,3 +1,5 @@
 node_modules/
 wle/
 *.tgz
+
+__pycache__/
