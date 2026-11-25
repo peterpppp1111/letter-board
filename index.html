@@ -219,8 +219,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 <script>
 (() => {
   const MODES = {
-    sprint:   { perWord: false, skip: true,  scoreLabel: 'Score', bestUnit: 'points', start: 'Start 60-second round' },
-    survival: { perWord: true,  skip: false, scoreLabel: 'Words', bestUnit: 'words',  start: 'Start survival' },
+    sprint:   { perWord: false, scoreLabel: 'Score', bestUnit: 'points', start: 'Start 60-second round' },
+    survival: { perWord: true,  scoreLabel: 'Words', bestUnit: 'words',  start: 'Start survival' },
   };
   // Each level deals boards by picking one random word from its list and reading its length and letter,
   // so boards follow that list's word distribution.
@@ -231,6 +231,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   };
   const SPRINT_TIME = 60;
   const TWO_LETTERS_AFTER = 20; // questions 1–20 give the first letter; from question 21 also a second letter at a random position
+  const SKIP_EVERY = 10;     // every 10 correct answers earn one skip
+  const DOUBLE_ENTER_MS = 1500; // pressing Enter twice on an empty box within this time uses a skip
   const MIN_ANSWERS = 4;     // only deal boards with at least this many answers in the level's list
   const advancedCap = q => q <= 5 ? 5 : q <= 10 ? 6 : q <= 15 ? 7 : 9;
 
@@ -255,7 +257,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   const S = {
     mode: 'sprint', level: LEVELS[store.get('lb-level', '')] ? store.get('lb-level', '') : 'advanced',
     len: 5, fixed: [{ p: 0, c: 's' }], q: 0, score: 0, left: SPRINT_TIME, playing: false,
-    used: new Set(), log: [], timer: null, lock: false,
+    used: new Set(), log: [], timer: null, lock: false, correct: 0, skips: 0, enterAt: 0,
   };
   const M = () => MODES[S.mode];
   const roundTime = () => S.mode === 'survival' ? LEVELS[S.level].survival : SPRINT_TIME;
@@ -264,7 +266,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   const helpText = () => (S.mode === 'sprint'
     ? 'Score one point per letter in 60 seconds.'
     : `Answer each board within ${roundTime()} seconds.`) +
-    ' Questions 1–20 give the first letter; from question 21 you also get a second letter somewhere in the word.';
+    ' Questions 1–20 give the first letter; from question 21 you also get a second letter somewhere in the word.' +
+    ` Every ${SKIP_EVERY} correct answers earn a skip: press Skip, or press Enter twice with the box empty.`;
 
   // ---------- word lists ----------
   // Count how many words in a list fit each board: "length+first letter" and "length+first letter+position+second letter".
@@ -456,19 +459,26 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   // ---------- play ----------
   function idle() {
     clearInterval(S.timer); S.playing = false; S.lock = false;
-    els.guess.disabled = true; els.skipBtn.disabled = true;
-    els.skipBtn.hidden = !M().skip;
+    els.guess.disabled = true;
     els.startBtn.textContent = M().start;
+    renderSkip();
+  }
+
+  function renderSkip() {
+    els.skipBtn.textContent = `Skip (${S.skips})`;
+    els.skipBtn.disabled = !S.playing || S.skips === 0;
+    els.skipBtn.title = S.skips ? 'Use a skip. You can also press Enter twice with the box empty.' : `You earn a skip every ${SKIP_EVERY} correct answers.`;
   }
 
   function start() {
     if (!dict) return;
     S.score = 0; S.q = 0; S.used = new Set(); S.log = []; S.playing = true; S.lock = false;
+    S.correct = 0; S.skips = 0; S.enterAt = 0;
     S.len = 0; S.fixed = [];
     S.left = roundTime();
     clearInterval(S.timer);
     S.timer = setInterval(tick, 1000);
-    els.guess.disabled = false; els.skipBtn.disabled = !M().skip; els.skipBtn.hidden = !M().skip;
+    els.guess.disabled = false; renderSkip();
     els.startBtn.textContent = 'Restart';
     els.guess.value = '';
     deal(); renderBoard(true); renderStats(); renderLedger();
@@ -505,6 +515,16 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
   function submit() {
     if (!S.playing || S.lock) return;
+    // Enter on an empty box: the first press asks, a second press within 1.5 s uses a skip
+    if (!typedRaw()) {
+      const now = Date.now();
+      if (S.skips && now - S.enterAt < DOUBLE_ENTER_MS) { S.enterAt = 0; return skip(); }
+      S.enterAt = now;
+      return S.skips
+        ? say(`Press Enter again to use a skip (${S.skips} left).`, 'alert')
+        : say(`No skips yet. You earn one every ${SKIP_EVERY} correct answers (${SKIP_EVERY - S.correct % SKIP_EVERY} to go).`, 'info');
+    }
+    S.enterAt = 0;
     const w = currentWord();
     if (w.length !== S.len) return reject(`That's ${w.length} letter${w.length === 1 ? '' : 's'}. You need ${S.len}.`);
     const wrong = S.fixed.find(f => w[f.p] !== f.c);
@@ -517,7 +537,11 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     S.score += S.mode === 'sprint' ? w.length : 1;
     S.log.push({ q: S.q, len: S.len, fixed: S.fixed, word: w });
     if (M().perWord) S.left = roundTime();
-    say(`${w.toUpperCase()}: +${S.mode === 'sprint' ? w.length : 1}`, 'good');
+    S.correct++;
+    let earned = '';
+    if (S.correct % SKIP_EVERY === 0) { S.skips++; earned = ` ${S.correct} correct: you earned a skip (${S.skips} now).`; }
+    say(`${w.toUpperCase()}: +${S.mode === 'sprint' ? w.length : 1}.${earned}`, 'good');
+    renderSkip();
     els.entry.classList.add('good');
     S.lock = true;
     renderStats(); renderLedger();
@@ -531,11 +555,15 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   }
 
   function skip() {
-    if (!S.playing || !M().skip || S.lock) return;
+    if (!S.playing || S.lock) return;
+    if (!S.skips) return say(`No skips yet. You earn one every ${SKIP_EVERY} correct answers.`, 'info');
+    S.skips--;
     const hints = hintsFor();
     S.log.push({ q: S.q, len: S.len, fixed: S.fixed, word: null, why: 'Skipped', hints });
-    say(`Skipped. You could have played ${hints.join(', ')}.`, 'info');
-    renderLedger(); next(); els.guess.focus();
+    if (M().perWord) S.left = roundTime(); // the next board gets the full time
+    renderLedger(); renderSkip(); next();
+    say(`Skipped. You could have played ${hints.join(', ')}. Skips left: ${S.skips}.`, 'info');
+    els.guess.focus();
   }
 
   // ---------- mode + settings ----------
@@ -544,7 +572,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     S.mode = mode;
     els.modeLinks.forEach(a => { if (a.dataset.mode === mode) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     idle();
-    S.q = 0; S.score = 0; S.log = []; S.used = new Set(); S.left = roundTime();
+    S.q = 0; S.score = 0; S.log = []; S.used = new Set(); S.left = roundTime(); S.correct = 0; S.skips = 0;
     if (P) { deal(); S.q = 0; renderBoard(true); say(helpText(), 'info'); }
     renderLevel(); renderStats(); renderLedger();
   }
@@ -573,7 +601,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   });
   els.guess.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); submit(); }
-    else if (e.key === 'Escape' && S.playing && M().skip) { e.preventDefault(); skip(); }
+    else if (e.key === 'Escape' && S.playing) { e.preventDefault(); skip(); }
   });
   els.startBtn.addEventListener('click', start);
   els.skipBtn.addEventListener('click', skip);
