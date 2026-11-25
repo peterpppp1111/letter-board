@@ -13,10 +13,10 @@ Both modes follow the same rules:
 
 - **Questions 1–20:** the word must **start with** the given letter.
 - **Question 21 onwards:** the letter goes in a **random position** (for example "E as the 4th letter"). The gold tile shows where.
+- Boards use any word length from 3 to 9 letters.
 - You can't use the same word twice in one game.
-- **Word length:** choose 3–5, 4–7 or 6–9 letters.
 - **Every board has an answer:** a board is only dealt when at least 4 everyday words fit it.
-- **Best scores:** saved in your browser, separately for each mode and word length.
+- **Best scores:** saved in your browser, separately for each mode.
 
 ## Run it
 

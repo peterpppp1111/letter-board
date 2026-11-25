@@ -121,15 +121,8 @@ button {
 .ghost { background: transparent; color: var(--ink); border-color: #3a404c; }
 .ghost:hover { border-color: var(--muted); }
 button:disabled { opacity: .4; cursor: default; }
-button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
-/* settings */
-.settings { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-.setting { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.setting .k { font-family: var(--mono); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-.seg { display: inline-flex; background: var(--board); border-radius: 6px; padding: 3px; gap: 3px; }
-.seg button { font-family: var(--body); font-weight: 600; font-size: .85rem; letter-spacing: 0; text-transform: none; padding: 6px 12px; border: 0; background: transparent; color: var(--muted); border-radius: 4px; }
-.seg button[aria-pressed="true"] { background: var(--flap); color: var(--ink); }
 
 /* ledger */
 .ledger h2 { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0 0 10px; }
@@ -193,16 +186,6 @@ button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber
       <button class="primary" id="startBtn" disabled>Start</button>
       <button class="ghost" id="skipBtn" disabled>Skip</button>
     </div>
-
-    <div class="settings">
-      <div class="setting"><span class="k">Word length</span>
-        <div class="seg" id="diffSeg" role="group" aria-label="Word length">
-          <button data-v="easy" aria-pressed="false">3–5</button>
-          <button data-v="normal" aria-pressed="true">4–7</button>
-          <button data-v="hard" aria-pressed="false">6–9</button>
-        </div>
-      </div>
-    </div>
   </section>
 
   <section class="ledger" aria-label="This game">
@@ -219,7 +202,7 @@ button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber
     survival: { time: 15, perWord: true,  skip: false, scoreLabel: 'Words', bestUnit: 'words',
                 start: 'Start survival', help: 'Answer each board within 15 seconds. Questions 1–20 start with the letter; after that the letter can be anywhere.' },
   };
-  const RANGES = { easy: [3, 5], normal: [4, 7], hard: [6, 9] };
+  const LENGTHS = [3, 9]; // boards use any word length from 3 to 9
   const ANYWHERE_AFTER = 20; // questions 1–20 use the first letter; from question 21 the position is random
   const MIN_COMMON = 4;      // only deal boards with at least this many everyday answers
 
@@ -228,7 +211,7 @@ button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber
     qnum: $('qnum'), score: $('score'), scoreLabel: $('scoreLabel'), time: $('time'), best: $('best'),
     len: $('len'), let: $('let'), flapLen: $('flapLen'), flapLet: $('flapLet'), letterLabel: $('letterLabel'),
     rule: $('rule'), tiles: $('tiles'), entry: $('entry'), guess: $('guess'), msg: $('msg'),
-    startBtn: $('startBtn'), skipBtn: $('skipBtn'), ledger: $('ledger'), diffSeg: $('diffSeg'),
+    startBtn: $('startBtn'), skipBtn: $('skipBtn'), ledger: $('ledger'),
     modeLinks: document.querySelectorAll('.modes a'),
   };
 
@@ -240,12 +223,12 @@ button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber
   let dict = null;   // Set of every accepted word
   let common = null; // { length: [words] } everyday words, used to deal boards and give hints
   const S = {
-    mode: 'sprint', diff: store.get('lb-diff', 'normal'),
+    mode: 'sprint',
     len: 5, letter: 's', pos: 0, q: 0, score: 0, left: 60, playing: false,
     used: new Set(), log: [], timer: null, lock: false,
   };
   const M = () => MODES[S.mode];
-  const bestKey = () => `lb-best-${S.mode}-${S.diff}`;
+  const bestKey = () => `lb-best-${S.mode}`;
   const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
 
   // ---------- dealing ----------
@@ -255,7 +238,7 @@ button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber
   function deal() {
     S.q++;
     const anywhere = S.q > ANYWHERE_AFTER;
-    const [lo, hi] = RANGES[S.diff];
+    const [lo, hi] = LENGTHS;
     for (let tries = 0; tries < 300; tries++) {
       const L = lo + Math.floor(Math.random() * (hi - lo + 1));
       const pool = common[L] || [];
@@ -452,15 +435,6 @@ button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--amber
     if (dict) { deal(); S.q = 0; renderBoard(true); say(M().help, 'info'); }
     renderStats(); renderLedger();
   }
-
-  const diffSync = () => els.diffSeg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.diff)));
-  diffSync();
-  els.diffSeg.addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b || b.dataset.v === S.diff) return;
-    S.diff = b.dataset.v; store.set('lb-diff', S.diff); diffSync();
-    setMode(S.mode);
-    if (S.playing === false && dict) say('Word length changed. Press Start when ready.', 'info');
-  });
 
   window.addEventListener('hashchange', () => setMode(location.hash.slice(1)));
 
