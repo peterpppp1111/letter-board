@@ -24,6 +24,7 @@
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   color-scheme: dark;
 }
+[hidden] { display: none !important; }
 html, body { min-height: 100%; }
 body {
   background: var(--board);
@@ -64,8 +65,10 @@ h1 span { color: var(--amber); }
 .stat:nth-child(2), .stat:nth-child(3) { align-items: center; }
 .stat:last-child { align-items: flex-end; }
 
-/* the two flaps */
+/* the flaps: length + first letter, plus a second letter from question 21 */
 .flaps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.flaps.three { grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.flaps.three .ch { font-size: clamp(3.4rem, 15vw, 6rem); }
 .flapbox { display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .flapbox .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 .flapbox .k.hot { color: var(--amber); }
@@ -135,7 +138,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 /* ledger */
 .ledger h2 { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0 0 10px; }
 .ledger ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.ledger li { display: grid; grid-template-columns: 2.4em 4.2em 1fr auto; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #ffffff0f; font-variant-numeric: tabular-nums; }
+.ledger li { display: grid; grid-template-columns: 2.4em 5.8em 1fr auto; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid #ffffff0f; font-variant-numeric: tabular-nums; }
 .ledger .n { font-family: var(--mono); color: var(--muted); font-size: .8rem; }
 .ledger .cue { font-family: var(--mono); color: var(--amber); font-size: .85rem; }
 .ledger .w { font-family: var(--display); font-weight: 600; font-size: 1.15rem; letter-spacing: .03em; text-transform: uppercase; min-width: 0; overflow-wrap: anywhere; }
@@ -148,7 +151,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   .panel { padding: 16px 14px; }
   .tiles { gap: 4px; }
   .stat .v { font-size: 1.5rem; }
-  .ledger li { grid-template-columns: 2em 3.8em 1fr auto; gap: 8px; }
+  .ledger li { grid-template-columns: 2em 5.2em 1fr auto; gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .flap.flip .ch, .entry.bad .tiles { animation: none; }
@@ -176,9 +179,10 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
       <div class="stat"><span class="k">Best</span><span class="v" id="best">0</span></div>
     </div>
 
-    <div class="flaps">
+    <div class="flaps" id="flaps">
       <div class="flapbox"><span class="k">Letters</span><div class="flap" id="flapLen"><span class="ch" id="len">5</span></div></div>
-      <div class="flapbox"><span class="k" id="letterLabel">Starts with</span><div class="flap" id="flapLet"><span class="ch" id="let">S</span></div></div>
+      <div class="flapbox"><span class="k">Starts with</span><div class="flap" id="flapLet"><span class="ch" id="let">S</span></div></div>
+      <div class="flapbox" id="secondBox" hidden><span class="k hot" id="secondLabel">4th letter</span><div class="flap" id="flapSecond"><span class="ch" id="second">E</span></div></div>
     </div>
 
     <p class="rule" id="rule">Type any <b>5-letter</b> word that starts with <b>S</b>.</p>
@@ -226,14 +230,15 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     hard:     { survival: 15, note: 'Boards follow all 72,000 accepted words, rare ones included, so long words come up most.' },
   };
   const SPRINT_TIME = 60;
-  const ANYWHERE_AFTER = 20; // questions 1–20 use the first letter; from question 21 the position is random
+  const TWO_LETTERS_AFTER = 20; // questions 1–20 give the first letter; from question 21 also a second letter at a random position
   const MIN_ANSWERS = 4;     // only deal boards with at least this many answers in the level's list
   const advancedCap = q => q <= 5 ? 5 : q <= 10 ? 6 : q <= 15 ? 7 : 9;
 
   const $ = id => document.getElementById(id);
   const els = {
     qnum: $('qnum'), score: $('score'), scoreLabel: $('scoreLabel'), time: $('time'), best: $('best'),
-    len: $('len'), let: $('let'), flapLen: $('flapLen'), flapLet: $('flapLet'), letterLabel: $('letterLabel'),
+    len: $('len'), let: $('let'), flapLen: $('flapLen'), flapLet: $('flapLet'),
+    flaps: $('flaps'), secondBox: $('secondBox'), secondLabel: $('secondLabel'), second: $('second'), flapSecond: $('flapSecond'),
     rule: $('rule'), tiles: $('tiles'), entry: $('entry'), guess: $('guess'), msg: $('msg'),
     startBtn: $('startBtn'), skipBtn: $('skipBtn'), ledger: $('ledger'),
     levelSeg: $('levelSeg'), levelNote: $('levelNote'),
@@ -249,7 +254,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   let P = null;    // per-level word lists, built when words.json loads
   const S = {
     mode: 'sprint', level: LEVELS[store.get('lb-level', '')] ? store.get('lb-level', '') : 'advanced',
-    len: 5, letter: 's', pos: 0, q: 0, score: 0, left: SPRINT_TIME, playing: false,
+    len: 5, fixed: [{ p: 0, c: 's' }], q: 0, score: 0, left: SPRINT_TIME, playing: false,
     used: new Set(), log: [], timer: null, lock: false,
   };
   const M = () => MODES[S.mode];
@@ -259,14 +264,18 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   const helpText = () => (S.mode === 'sprint'
     ? 'Score one point per letter in 60 seconds.'
     : `Answer each board within ${roundTime()} seconds.`) +
-    ' Questions 1–20 start with the letter; after that the letter can be anywhere.';
+    ' Questions 1–20 give the first letter; from question 21 you also get a second letter somewhere in the word.';
 
   // ---------- word lists ----------
-  // count how many words in a list fit each (length, position, letter) board
+  // Count how many words in a list fit each board: "length+first letter" and "length+first letter+position+second letter".
+  const boardKey = (L, fixed) => L + fixed.map(f => f.c + f.p).join('');
   function indexBoards(list) {
     const m = new Map();
-    for (const w of list) for (let p = 0; p < w.length; p++) {
-      const k = w.length + w[p] + p; m.set(k, (m.get(k) || 0) + 1);
+    const add = k => m.set(k, (m.get(k) || 0) + 1);
+    for (const w of list) {
+      const first = { p: 0, c: w[0] };
+      add(boardKey(w.length, [first]));
+      for (let p = 1; p < w.length; p++) add(boardKey(w.length, [first, { p, c: w[p] }]));
     }
     return m;
   }
@@ -314,84 +323,93 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   }
 
   // ---------- dealing ----------
-  const fits = (w, L, c, p) => w.length === L && w[p] === c;
+  const fits = (w, L, fixed) => w.length === L && fixed.every(f => w[f.p] === f.c);
 
-  function openAnswers(L, c, p) {
-    let n = P[S.level].idx.get(L + c + p) || 0;
-    for (const u of S.used) if (fits(u, L, c, p)) n--;
+  function openAnswers(L, fixed) {
+    let n = P[S.level].idx.get(boardKey(L, fixed)) || 0;
+    for (const u of S.used) if (fits(u, L, fixed)) n--;
     return n;
   }
 
   function deal() {
     S.q++;
-    const anywhere = S.q > ANYWHERE_AFTER;
-    for (let tries = 0; tries < 300; tries++) {
-      const w = pickWord();
-      const L = w.length;
-      const p = anywhere ? rand(L) : 0;
-      const c = w[p];
-      if (c === S.letter && L === S.len && p === S.pos) continue;
-      if (openAnswers(L, c, p) >= MIN_ANSWERS) { S.len = L; S.letter = c; S.pos = p; return; }
+    const prev = boardKey(S.len, S.fixed);
+    // Every board comes from one real word. From question 21, also show one more of its letters at a random position.
+    // If no two-letter board with enough answers turns up, fall back to a first-letter board.
+    for (const two of S.q > TWO_LETTERS_AFTER ? [true, false] : [false]) {
+      for (let tries = 0; tries < 300; tries++) {
+        const w = pickWord();
+        const L = w.length;
+        const fixed = [{ p: 0, c: w[0] }];
+        if (two) { const p = 1 + rand(L - 1); fixed.push({ p, c: w[p] }); }
+        if (boardKey(L, fixed) === prev) continue;
+        if (openAnswers(L, fixed) >= MIN_ANSWERS) { S.len = L; S.fixed = fixed; return; }
+      }
     }
   }
 
   // ---------- typing ----------
-  // Lay the typed letters into the slots around the printed letter. Players may type the printed letter or skip it.
+  const fixedAt = p => S.fixed.find(f => f.p === p);
+  const typedRaw = () => els.guess.value.toLowerCase().replace(/[^a-z]/g, '');
+
+  // Lay the typed letters into the slots around the printed letters. Players may type a printed letter or skip it.
   function compose() {
-    const v = els.guess.value.toLowerCase().replace(/[^a-z]/g, '');
+    const v = typedRaw();
     const out = [];
     let i = 0;
-    while (i < v.length || out.length === S.pos) {
-      if (out.length === S.pos) {
-        out.push(S.letter);
-        if (v[i] === S.letter) i++;
-        continue;
-      }
+    for (;;) {
+      const f = fixedAt(out.length);
+      if (f) { out.push(f.c); if (v[i] === f.c) i++; continue; }
+      if (i >= v.length) break;
       out.push(v[i++]);
     }
-    return { out, filled: Math.min(v.length, S.len) };
+    return out;
   }
 
   function currentWord() {
     // if the player typed the whole word themselves, trust that spelling
-    const raw = els.guess.value.toLowerCase().replace(/[^a-z]/g, '');
-    if (raw.length === S.len && raw[S.pos] === S.letter) return raw;
-    return compose().out.join('');
+    const raw = typedRaw();
+    if (fits(raw, S.len, S.fixed)) return raw;
+    return compose().join('');
   }
 
   // ---------- rendering ----------
   function flip(el) { el.classList.remove('flip'); void el.offsetWidth; el.classList.add('flip'); }
 
   function boardText() {
-    const L = S.letter.toUpperCase();
-    return S.pos === 0
-      ? `Type any <b>${S.len}-letter</b> word that starts with <b>${L}</b>.`
-      : `Type any <b>${S.len}-letter</b> word with <b>${L}</b> as the <b>${ordinal(S.pos + 1)}</b> letter.`;
+    const [first, second] = S.fixed;
+    let t = `Type any <b>${S.len}-letter</b> word that starts with <b>${first.c.toUpperCase()}</b>`;
+    if (second) t += ` and has <b>${second.c.toUpperCase()}</b> as the <b>${ordinal(second.p + 1)}</b> letter`;
+    return t + '.';
   }
 
   function renderBoard(animate) {
+    const [first, second] = S.fixed;
     els.len.textContent = S.len;
-    els.let.textContent = S.letter.toUpperCase();
-    els.letterLabel.textContent = S.pos === 0 ? 'Starts with' : `${ordinal(S.pos + 1)} letter`;
-    els.letterLabel.classList.toggle('hot', S.pos !== 0);
+    els.let.textContent = first.c.toUpperCase();
+    els.secondBox.hidden = !second;
+    els.flaps.classList.toggle('three', !!second);
+    if (second) { els.second.textContent = second.c.toUpperCase(); els.secondLabel.textContent = `${ordinal(second.p + 1)} letter`; }
     els.rule.innerHTML = boardText();
-    if (animate) { flip(els.flapLen); setTimeout(() => flip(els.flapLet), 90); }
+    if (animate) {
+      flip(els.flapLen); setTimeout(() => flip(els.flapLet), 90);
+      if (second) setTimeout(() => flip(els.flapSecond), 180);
+    }
     renderTiles();
   }
 
   function renderTiles() {
-    const { out } = compose();
-    const typedSlots = out.length; // slots already holding something (incl. printed letter if reached)
+    const out = compose();
     const n = Math.max(S.len, out.length);
-    // cursor sits on the first empty slot that is not the printed one
-    let cur = typedSlots; if (cur === S.pos) cur++;
+    // the cursor sits on the first empty slot that isn't a printed letter
+    let cur = out.length; while (fixedAt(cur)) cur++;
     let html = '';
     for (let i = 0; i < n; i++) {
-      const fixed = i === S.pos;
-      const ch = fixed ? S.letter : (out[i] || '');
+      const f = fixedAt(i);
+      const ch = f ? f.c : (out[i] || '');
       const cls = ['tile'];
-      if (fixed) cls.push('fixed'); else if (ch) cls.push('on');
-      if (!fixed && i === cur && S.playing) cls.push('cur');
+      if (f) cls.push('fixed'); else if (ch) cls.push('on');
+      if (!f && i === cur && S.playing) cls.push('cur');
       html += `<div class="${cls.join(' ')}">${ch}</div>`;
     }
     els.tiles.innerHTML = html;
@@ -411,7 +429,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   function renderLedger() {
     if (!S.log.length) { els.ledger.innerHTML = '<p class="empty">Your words appear here.</p>'; return; }
     els.ledger.innerHTML = '<ol>' + S.log.slice().reverse().map(e => {
-      const cue = `${e.len}·${e.letter.toUpperCase()}${e.pos ? '@' + (e.pos + 1) : ''}`;
+      const cue = `${e.len}·` + e.fixed.map(f => f.c.toUpperCase() + (f.p ? '@' + (f.p + 1) : '')).join(' ');
       const right = e.word
         ? `<span class="w">${e.word}</span><span class="pts">+${S.mode === 'sprint' ? e.word.length : 1}</span>`
         : `<span class="w miss">${e.why}. Could be: ${e.hints.join(', ')}</span><span class="pts zero">0</span>`;
@@ -421,7 +439,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
   // Suggest answers the player is likely to know: the most-used words on Easy, everyday words otherwise.
   function hintsFor() {
-    const ok = w => fits(w, S.len, S.letter, S.pos) && !S.used.has(w);
+    const ok = w => fits(w, S.len, S.fixed) && !S.used.has(w);
     const shuffle = a => a.sort(() => Math.random() - .5);
     let pick;
     if (S.level === 'easy') {
@@ -446,7 +464,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   function start() {
     if (!dict) return;
     S.score = 0; S.q = 0; S.used = new Set(); S.log = []; S.playing = true; S.lock = false;
-    S.len = 0; S.letter = ''; S.pos = 0;
+    S.len = 0; S.fixed = [];
     S.left = roundTime();
     clearInterval(S.timer);
     S.timer = setInterval(tick, 1000);
@@ -468,7 +486,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     let note = '';
     if (M().perWord && timedOut) {
       const hints = hintsFor();
-      S.log.push({ q: S.q, len: S.len, letter: S.letter, pos: S.pos, word: null, why: 'Out of time', hints });
+      S.log.push({ q: S.q, len: S.len, fixed: S.fixed, word: null, why: 'Out of time', hints });
       note = ` You could have played ${hints.join(', ')}.`;
     }
     idle();
@@ -489,12 +507,15 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     if (!S.playing || S.lock) return;
     const w = currentWord();
     if (w.length !== S.len) return reject(`That's ${w.length} letter${w.length === 1 ? '' : 's'}. You need ${S.len}.`);
-    if (w[S.pos] !== S.letter) return reject(`The ${ordinal(S.pos + 1)} letter must be ${S.letter.toUpperCase()}.`);
+    const wrong = S.fixed.find(f => w[f.p] !== f.c);
+    if (wrong) return reject(wrong.p === 0
+      ? `The word must start with ${wrong.c.toUpperCase()}.`
+      : `The ${ordinal(wrong.p + 1)} letter must be ${wrong.c.toUpperCase()}.`);
     if (S.used.has(w)) return reject(`You already used ${w.toUpperCase()} this game.`);
     if (!dict.has(w)) return reject(`${w.toUpperCase()} isn't in the dictionary. Try another word.`);
     S.used.add(w);
     S.score += S.mode === 'sprint' ? w.length : 1;
-    S.log.push({ q: S.q, len: S.len, letter: S.letter, pos: S.pos, word: w });
+    S.log.push({ q: S.q, len: S.len, fixed: S.fixed, word: w });
     if (M().perWord) S.left = roundTime();
     say(`${w.toUpperCase()}: +${S.mode === 'sprint' ? w.length : 1}`, 'good');
     els.entry.classList.add('good');
@@ -506,13 +527,13 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   function next() {
     els.guess.value = '';
     deal(); renderBoard(true); renderStats();
-    if (S.q === ANYWHERE_AFTER + 1) say('Question 21: from now on the letter can be in any position. Watch the gold tile.', 'alert');
+    if (S.q === TWO_LETTERS_AFTER + 1) say('Question 21: from now on you also get a second letter somewhere in the word. Watch the gold tiles.', 'alert');
   }
 
   function skip() {
     if (!S.playing || !M().skip || S.lock) return;
     const hints = hintsFor();
-    S.log.push({ q: S.q, len: S.len, letter: S.letter, pos: S.pos, word: null, why: 'Skipped', hints });
+    S.log.push({ q: S.q, len: S.len, fixed: S.fixed, word: null, why: 'Skipped', hints });
     say(`Skipped. You could have played ${hints.join(', ')}.`, 'info');
     renderLedger(); next(); els.guess.focus();
   }

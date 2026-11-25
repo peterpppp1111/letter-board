@@ -34,7 +34,7 @@ Share of boards by word length, after the first questions:
 ## Rules for every mode and difficulty
 
 - **Questions 1–20:** the word must **start with** the given letter.
-- **Question 21 onwards:** the letter goes in a **random position** (for example "E as the 4th letter"). The gold tile shows where.
+- **Question 21 onwards:** you get **two letters**: the first letter, plus a second letter at a random position, for example "starts with S and has E as the 4th letter" (SHEETED, SPRAYED). Both letters come from one real word, and the gold tiles show where they go.
 - **Word length:** boards use lengths from 3 to 9 letters.
 - **Any word counts:** answers are checked against the full dictionary, whatever the difficulty.
 - **No repeats:** you can't use the same word twice in one game.
