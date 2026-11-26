@@ -25,7 +25,7 @@ Each difficulty deals a board by picking one random word from its own word list 
 
 On two-letter boards (question 21 onwards), Survival adds 3 more seconds. The clock pauses briefly while a correct answer is shown.
 
-**Hint letters (Survival, Easy and Advanced only):** from question 21, on 8- and 9-letter boards, one more letter is revealed when 10 seconds are left and another at 5 seconds. They come from a real word you haven't used yet (the most common one on Easy) and show with a dashed gold border. They're only help: any word that fits the original letters still counts.
+**Hint letters (Survival, Easy and Advanced only):** from question 21, on 8- and 9-letter boards, the word's next letters are filled in from the start: the 2nd letter when 10 seconds are left and the 3rd at 5 seconds. If one of those positions is already shown, the next empty position is filled instead. They come from a real word you haven't used yet (the most common one on Easy) and show with a dashed gold border. They're only help: any word that fits the original letters still counts.
 
 Survival seconds by word length (one-letter boards):
 

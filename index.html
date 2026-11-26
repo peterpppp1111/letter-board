@@ -241,7 +241,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   };
   const SPRINT_TIME = 90;
   const TWO_LETTER_BONUS = 3;
-  // Survival on Easy/Advanced, question 21+, 8–9 letter boards: reveal one more letter at 10 s left and another at 5 s
+  // Survival on Easy/Advanced, question 21+, 8–9 letter boards: at 10 s left reveal the next letter after the first
+  // (normally the 2nd), and at 5 s the one after that (normally the 3rd)
   const REVEAL_AT = [10, 5];
   const revealOn = () => S.mode === 'survival' && S.level !== 'hard' && S.q > TWO_LETTERS_AFTER && S.len >= 8; // Survival: extra seconds when the board shows two letters
   // Survival: seconds for one board = base + perLetter × word length (at least min), +3 on two-letter boards
@@ -551,9 +552,9 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
           ? pool.reduce((a, b) => (P.easy.freq.get(b) > P.easy.freq.get(a) ? b : a)) // the most-used answer
           : pool[rand(pool.length)];
       }
-      const open = [...Array(S.len).keys()].filter(p => !fixedAt(p));
-      if (!open.length) return;
-      const p = open[rand(open.length)];
+      // fill in order right after the first letter, skipping positions already shown
+      const p = [...Array(S.len).keys()].find(i => !fixedAt(i));
+      if (p === undefined) return;
       S.reveal.push({ p, c: S.revealWord[p] });
       added = true;
     }
