@@ -11,17 +11,31 @@ An English word game in the browser. The board shows a word length and a letter,
 | Mode | Goal | Timer | Scoring |
 |---|---|---|---|
 | **Sprint** (`#sprint`) | Score as many points as you can | 90 seconds for the whole round | 1 point per letter. Unlimited skips |
-| **Survival** (`#survival`) | Keep going as long as you can | A time limit per word (set by difficulty), reset after each correct answer | 1 point per word. Running out of time ends the game |
+| **Survival** (`#survival`) | Keep going as long as you can | A new clock for every board, longer for longer words (see below) | 1 point per word. Running out of time ends the game |
 
 ## Difficulty
 
 Each difficulty deals a board by picking one random word from its own word list and using that word's length and letter. This makes the boards follow that list's word distribution.
 
-| Difficulty | Boards follow | Survival time per word |
+| Difficulty | Boards follow | Survival time per board |
 |---|---|---|
-| **Easy** | How often words are used in real English (about 18,000 known words, weighted by usage), so short words come up most | 25 s |
-| **Advanced** | The everyday list (about 30,000 words, each equally likely). It starts short: questions 1–5 use up to 5 letters, 6–10 up to 6, 11–15 up to 7, then anything from 3 to 9 | 20 s |
-| **Hard** | Every accepted word (about 72,000, rare ones included), so long words come up most | 15 s |
+| **Easy** | How often words are used in real English (about 18,000 known words, weighted by usage), so short words come up most | 12 + 3 × letters (21–39 s) |
+| **Advanced** | The everyday list (about 30,000 words, each equally likely). It starts short: questions 1–5 use up to 5 letters, 6–10 up to 6, 11–15 up to 7, then anything from 3 to 9 | 6 + 2 × letters (12–24 s) |
+| **Hard** | Every accepted word (about 72,000, rare ones included), so long words come up most | 1 + 2 × letters, at least 10 s (10–19 s) |
+
+On two-letter boards (question 21 onwards), Survival adds 3 more seconds. The clock pauses briefly while a correct answer is shown.
+
+Survival seconds by word length (one-letter boards):
+
+| Length | Easy | Advanced | Hard |
+|---|---:|---:|---:|
+| 3 | 21 | 12 | 10 |
+| 4 | 24 | 14 | 10 |
+| 5 | 27 | 16 | 11 |
+| 6 | 30 | 18 | 13 |
+| 7 | 33 | 20 | 15 |
+| 8 | 36 | 22 | 17 |
+| 9 | 39 | 24 | 19 |
 
 Share of boards by word length, after the first questions:
 
@@ -42,7 +56,7 @@ Share of boards by word length, after the first questions:
 - **Word length:** boards use lengths from 3 to 9 letters.
 - **Any word counts:** answers are checked against the full dictionary, whatever the difficulty.
 - **No repeats:** you can't use the same word twice in one game.
-- **Skips:** Sprint has unlimited skips. In Survival, every 10 correct answers (10, 20, 30…) earn one skip, and unused skips carry over. In both modes, press **Skip** (or Esc), or press **Enter twice** with the box empty. In Survival, the next board gets the full time again.
+- **Skips:** Sprint has unlimited skips. In Survival, every 10 correct answers (10, 20, 30…) earn one skip, and unused skips carry over. The green energy bar beside the letters fills one cell per correct answer and shows how many are left until the next skip. In both modes, press **Skip** (or Esc), or press **Enter twice** with the box empty. In Survival, the next board starts with its own full time.
 - **Every board has an answer:** a board is only dealt when at least 4 words in that difficulty's list fit it.
 - **Best scores:** saved in your browser, separately for each mode and difficulty.
 

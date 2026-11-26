@@ -65,11 +65,19 @@ h1 span { color: var(--amber); }
 .stat:nth-child(2), .stat:nth-child(3) { align-items: center; }
 .stat:last-child { align-items: flex-end; }
 
-/* the flaps: length + first letter, plus a second letter from question 21 */
-.flaps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.flaps.three { grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.flaps.three .ch { font-size: clamp(3.4rem, 15vw, 6rem); }
-.flapbox { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+/* the flaps: first letter, plus a second letter from question 21; Survival adds the skip energy bar on the left */
+.flaps { display: flex; justify-content: center; align-items: stretch; gap: 14px; }
+.flapbox { flex: 1 1 0; min-width: 0; max-width: 180px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.flaps.two .ch { font-size: clamp(3.8rem, 18vw, 7rem); }
+
+/* skip energy bar (Survival): one cell per correct answer, full at 10 */
+.energy { flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.energy .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.ebar { flex: 1; width: 30px; display: flex; flex-direction: column-reverse; gap: 3px; padding: 4px; background: var(--flap); border-radius: 8px; }
+.ebar i { flex: 1; border-radius: 2px; background: #343a46; transition: background-color .2s; }
+.ebar i.on { background: var(--good); }
+.ebar.full i { background: var(--amber); animation: charge .7s ease-out; }
+@keyframes charge { 0% { filter: brightness(1.8) } 100% { filter: none } }
 .flapbox .k { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 .flapbox .k.hot { color: var(--amber); }
 .flap {
@@ -154,7 +162,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   .ledger li { grid-template-columns: 2em 5.2em 1fr auto; gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .flap.flip .ch, .entry.bad .tiles { animation: none; }
+  .flap.flip .ch, .entry.bad .tiles, .ebar.full i { animation: none; }
 }
 </style>
 </head>
@@ -180,7 +188,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     </div>
 
     <div class="flaps" id="flaps">
-      <div class="flapbox"><span class="k">Letters</span><div class="flap" id="flapLen"><span class="ch" id="len">5</span></div></div>
+      <div class="energy" id="energy" hidden><span class="k" id="energyLabel">Skip in 10</span><div class="ebar" id="ebar" role="meter" aria-label="Correct answers toward the next skip" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"></div></div>
       <div class="flapbox"><span class="k">Starts with</span><div class="flap" id="flapLet"><span class="ch" id="let">S</span></div></div>
       <div class="flapbox" id="secondBox" hidden><span class="k hot" id="secondLabel">4th letter</span><div class="flap" id="flapSecond"><span class="ch" id="second">E</span></div></div>
     </div>
@@ -225,11 +233,17 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   // Each level deals boards by picking one random word from its list and reading its length and letter,
   // so boards follow that list's word distribution.
   const LEVELS = {
-    easy:     { survival: 25, note: 'Boards follow how often words are used in everyday English, so short words come up most.' },
-    advanced: { survival: 20, note: 'Boards follow the 30,000-word everyday list. Questions 1–5 use up to 5 letters, 6–10 up to 6, 11–15 up to 7, then anything from 3 to 9.' },
-    hard:     { survival: 15, note: 'Boards follow all 72,000 accepted words, rare ones included, so long words come up most.' },
+    easy:     { base: 12, perLetter: 3, min: 0,  note: 'Boards follow how often words are used in everyday English, so short words come up most.' },
+    advanced: { base: 6,  perLetter: 2, min: 0,  note: 'Boards follow the 30,000-word everyday list. Questions 1–5 use up to 5 letters, 6–10 up to 6, 11–15 up to 7, then anything from 3 to 9.' },
+    hard:     { base: 1,  perLetter: 2, min: 10, note: 'Boards follow all 72,000 accepted words, rare ones included, so long words come up most.' },
   };
   const SPRINT_TIME = 90;
+  const TWO_LETTER_BONUS = 3; // Survival: extra seconds when the board shows two letters
+  // Survival: seconds for one board = base + perLetter × word length (at least min), +3 on two-letter boards
+  const survivalSeconds = (level, len, twoLetters) => {
+    const lv = LEVELS[level];
+    return Math.max(lv.min, lv.base + lv.perLetter * len) + (twoLetters ? TWO_LETTER_BONUS : 0);
+  };
   const TWO_LETTERS_AFTER = 20; // questions 1–20 give the first letter; from question 21 also a second letter at a random position
   const SKIP_EVERY = 10;     // every 10 correct answers earn one skip
   const DOUBLE_ENTER_MS = 1500; // pressing Enter twice on an empty box within this time uses a skip
@@ -239,7 +253,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   const $ = id => document.getElementById(id);
   const els = {
     qnum: $('qnum'), score: $('score'), scoreLabel: $('scoreLabel'), time: $('time'), best: $('best'),
-    len: $('len'), let: $('let'), flapLen: $('flapLen'), flapLet: $('flapLet'),
+    let: $('let'), flapLet: $('flapLet'), energy: $('energy'), energyLabel: $('energyLabel'), ebar: $('ebar'),
     flaps: $('flaps'), secondBox: $('secondBox'), secondLabel: $('secondLabel'), second: $('second'), flapSecond: $('flapSecond'),
     rule: $('rule'), tiles: $('tiles'), entry: $('entry'), guess: $('guess'), msg: $('msg'),
     startBtn: $('startBtn'), skipBtn: $('skipBtn'), ledger: $('ledger'),
@@ -260,12 +274,14 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     used: new Set(), log: [], timer: null, lock: false, correct: 0, skips: 0, enterAt: 0,
   };
   const M = () => MODES[S.mode];
-  const roundTime = () => S.mode === 'survival' ? LEVELS[S.level].survival : SPRINT_TIME;
+  // the clock for the current board (Survival) or the whole round (Sprint)
+  const roundTime = () => S.mode === 'survival' && S.len ? survivalSeconds(S.level, S.len, S.fixed.length > 1) : SPRINT_TIME;
+  const survivalRange = () => `${survivalSeconds(S.level, 3, false)}–${survivalSeconds(S.level, 9, false)}`;
   const bestKey = () => `lb-best-${S.mode}-${S.level}`;
   const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
   const helpText = () => (S.mode === 'sprint'
     ? `Score one point per letter in ${SPRINT_TIME} seconds.`
-    : `Answer each board within ${roundTime()} seconds.`) +
+    : `Answer each board in time: ${survivalRange()} seconds depending on word length, +${TWO_LETTER_BONUS} on two-letter boards.`) +
     ' Questions 1–20 give the first letter; from question 21 you also get a second letter somewhere in the word.' +
     (S.mode === 'sprint'
       ? ' Skip as often as you like: press Skip, or press Enter twice with the box empty.'
@@ -390,15 +406,14 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
   function renderBoard(animate) {
     const [first, second] = S.fixed;
-    els.len.textContent = S.len;
     els.let.textContent = first.c.toUpperCase();
     els.secondBox.hidden = !second;
-    els.flaps.classList.toggle('three', !!second);
+    els.flaps.classList.toggle('two', !!second);
     if (second) { els.second.textContent = second.c.toUpperCase(); els.secondLabel.textContent = `${ordinal(second.p + 1)} letter`; }
     els.rule.innerHTML = boardText();
     if (animate) {
-      flip(els.flapLen); setTimeout(() => flip(els.flapLet), 90);
-      if (second) setTimeout(() => flip(els.flapSecond), 180);
+      flip(els.flapLet);
+      if (second) setTimeout(() => flip(els.flapSecond), 90);
     }
     renderTiles();
   }
@@ -463,7 +478,20 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     clearInterval(S.timer); S.playing = false; S.lock = false;
     els.guess.disabled = true;
     els.startBtn.textContent = M().start;
-    renderSkip();
+    renderSkip(); renderEnergy();
+  }
+
+  // Survival's energy bar: one cell per correct answer since the last skip was earned
+  function renderEnergy(justEarned) {
+    els.energy.hidden = M().freeSkips;
+    if (M().freeSkips) return;
+    const n = justEarned ? SKIP_EVERY : S.correct % SKIP_EVERY;
+    if (els.ebar.children.length !== SKIP_EVERY) els.ebar.innerHTML = '<i></i>'.repeat(SKIP_EVERY);
+    [...els.ebar.children].forEach((c, i) => c.classList.toggle('on', i < n));
+    els.ebar.classList.toggle('full', !!justEarned);
+    els.ebar.setAttribute('aria-valuenow', n);
+    els.energyLabel.textContent = justEarned ? 'Skip +1' : `Skip in ${SKIP_EVERY - n}`;
+    if (justEarned) { clearTimeout(S.energyTimer); S.energyTimer = setTimeout(() => renderEnergy(), 900); }
   }
 
   const canSkip = () => M().freeSkips || S.skips > 0;
@@ -479,18 +507,19 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     S.score = 0; S.q = 0; S.used = new Set(); S.log = []; S.playing = true; S.lock = false;
     S.correct = 0; S.skips = 0; S.enterAt = 0;
     S.len = 0; S.fixed = [];
-    S.left = roundTime();
     clearInterval(S.timer);
-    S.timer = setInterval(tick, 1000);
-    els.guess.disabled = false; renderSkip();
+    els.guess.disabled = false; renderSkip(); renderEnergy();
     els.startBtn.textContent = 'Restart';
     els.guess.value = '';
-    deal(); renderBoard(true); renderStats(); renderLedger();
+    deal(); S.left = roundTime();
+    S.timer = setInterval(tick, 1000);
+    renderBoard(true); renderStats(); renderLedger();
     say('Go! Press Enter to submit.', 'info');
     els.guess.focus();
   }
 
   function tick() {
+    if (S.lock) return; // the clock pauses while a correct answer is shown
     S.left--;
     renderStats();
     if (S.left <= 0) end(true);
@@ -541,12 +570,11 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     S.used.add(w);
     S.score += S.mode === 'sprint' ? w.length : 1;
     S.log.push({ q: S.q, len: S.len, fixed: S.fixed, word: w });
-    if (M().perWord) S.left = roundTime();
     S.correct++;
     let earned = '';
-    if (!M().freeSkips && S.correct % SKIP_EVERY === 0) { S.skips++; earned = ` ${S.correct} correct: you earned a skip (${S.skips} now).`; }
-    say(`${w.toUpperCase()}: +${S.mode === 'sprint' ? w.length : 1}.${earned}`, 'good');
-    renderSkip();
+    if (!M().freeSkips && S.correct % SKIP_EVERY === 0) { S.skips++; earned = `. ${S.correct} correct: you earned a skip (${S.skips} now).`; }
+    say(`${w.toUpperCase()}: +${S.mode === 'sprint' ? w.length : 1}${earned}`, 'good');
+    renderSkip(); renderEnergy(!!earned);
     els.entry.classList.add('good');
     S.lock = true;
     renderStats(); renderLedger();
@@ -555,7 +583,9 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
   function next() {
     els.guess.value = '';
-    deal(); renderBoard(true); renderStats();
+    deal();
+    if (M().perWord) S.left = roundTime(); // each Survival board gets its own time
+    renderBoard(true); renderStats();
     if (S.q === TWO_LETTERS_AFTER + 1) say('Question 21: from now on you also get a second letter somewhere in the word. Watch the gold tiles.', 'alert');
   }
 
@@ -565,7 +595,6 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     if (!M().freeSkips) S.skips--;
     const hints = hintsFor();
     S.log.push({ q: S.q, len: S.len, fixed: S.fixed, word: null, why: 'Skipped', hints });
-    if (M().perWord) S.left = roundTime(); // the next board gets the full time
     renderLedger(); renderSkip(); next();
     say(`Skipped. You could have played ${hints.join(', ')}.` + (M().freeSkips ? '' : ` Skips left: ${S.skips}.`), 'info');
     els.guess.focus();
@@ -577,16 +606,17 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     S.mode = mode;
     els.modeLinks.forEach(a => { if (a.dataset.mode === mode) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     idle();
-    S.q = 0; S.score = 0; S.log = []; S.used = new Set(); S.left = roundTime(); S.correct = 0; S.skips = 0;
+    S.q = 0; S.score = 0; S.log = []; S.used = new Set(); S.correct = 0; S.skips = 0;
     if (P) { deal(); S.q = 0; renderBoard(true); say(helpText(), 'info'); }
-    renderLevel(); renderStats(); renderLedger();
+    S.left = roundTime();
+    renderLevel(); renderStats(); renderLedger(); renderEnergy();
   }
 
   function renderLevel() {
     els.levelSeg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.level)));
     const lv = LEVELS[S.level];
-    els.levelNote.textContent = `${lv.note} Survival: ${lv.survival} seconds per word.`;
-    document.querySelector('.modes a[data-mode="survival"] span').textContent = `${lv.survival} seconds for every word`;
+    els.levelNote.textContent = `${lv.note} Survival: ${survivalRange()} seconds per word, longer words get more.`;
+    document.querySelector('.modes a[data-mode="survival"] span').textContent = `${survivalRange()} seconds per word, by length`;
   }
 
   els.levelSeg.addEventListener('click', e => {
@@ -615,7 +645,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
   fetch('words.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(data => {
     buildLists(data);
-    deal(); S.q = 0; renderBoard(false); renderStats();
+    deal(); S.q = 0; S.left = roundTime(); renderBoard(false); renderStats();
     els.startBtn.disabled = false;
     say(helpText(), 'info');
   }).catch(() => say('The dictionary did not load. Reload the page to try again.', 'bad'));
