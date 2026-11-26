@@ -104,6 +104,8 @@ h1 span { color: var(--amber); }
   transition: border-color .15s;
 }
 .tile.fixed { color: var(--amber); border-color: #5a4a30; background: #2a2418; }
+.tile.reveal { color: var(--amber); border: 2px dashed var(--amber); background: #2a2418; animation: pop .35s ease-out; }
+@keyframes pop { 0% { transform: scale(1.25) } 100% { transform: none } }
 .tile.on { border-color: var(--ink); }
 .tile.cur { border-color: var(--amber); }
 .entry.good .tile { border-color: var(--good); color: var(--good); }
@@ -162,7 +164,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   .ledger li { grid-template-columns: 2em 5.2em 1fr auto; gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .flap.flip .ch, .entry.bad .tiles, .ebar.full i { animation: none; }
+  .flap.flip .ch, .entry.bad .tiles, .ebar.full i, .tile.reveal { animation: none; }
 }
 </style>
 </head>
@@ -238,7 +240,10 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     hard:     { base: 1,  perLetter: 2, min: 10, note: 'Boards follow all 72,000 accepted words, rare ones included, so long words come up most.' },
   };
   const SPRINT_TIME = 90;
-  const TWO_LETTER_BONUS = 3; // Survival: extra seconds when the board shows two letters
+  const TWO_LETTER_BONUS = 3;
+  // Survival on Easy/Advanced, question 21+, 8–9 letter boards: reveal one more letter at 10 s left and another at 5 s
+  const REVEAL_AT = [10, 5];
+  const revealOn = () => S.mode === 'survival' && S.level !== 'hard' && S.q > TWO_LETTERS_AFTER && S.len >= 8; // Survival: extra seconds when the board shows two letters
   // Survival: seconds for one board = base + perLetter × word length (at least min), +3 on two-letter boards
   const survivalSeconds = (level, len, twoLetters) => {
     const lv = LEVELS[level];
@@ -354,6 +359,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
   function deal() {
     S.q++;
+    S.reveal = []; S.revealWord = null;
     const prev = boardKey(S.len, S.fixed);
     // Every board comes from one real word. From question 21, also show one more of its letters at a random position.
     // If no two-letter board with enough answers turns up, fall back to a first-letter board.
@@ -364,13 +370,15 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
         const fixed = [{ p: 0, c: w[0] }];
         if (two) { const p = 1 + rand(L - 1); fixed.push({ p, c: w[p] }); }
         if (boardKey(L, fixed) === prev) continue;
-        if (openAnswers(L, fixed) >= MIN_ANSWERS) { S.len = L; S.fixed = fixed; return; }
+        if (openAnswers(L, fixed) >= MIN_ANSWERS) { S.len = L; S.fixed = fixed; S.reveal = []; S.revealWord = null; return; }
       }
     }
   }
 
   // ---------- typing ----------
-  const fixedAt = p => S.fixed.find(f => f.p === p);
+  // letters printed on the tiles: the board's letters plus any revealed in the last seconds
+  const shown = () => S.fixed.concat(S.reveal || []);
+  const fixedAt = p => shown().find(f => f.p === p);
   const typedRaw = () => els.guess.value.toLowerCase().replace(/[^a-z]/g, '');
 
   // Lay the typed letters into the slots around the printed letters. Players may type a printed letter or skip it.
@@ -401,7 +409,9 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     const [first, second] = S.fixed;
     let t = `Type any <b>${S.len}-letter</b> word that starts with <b>${first.c.toUpperCase()}</b>`;
     if (second) t += ` and has <b>${second.c.toUpperCase()}</b> as the <b>${ordinal(second.p + 1)}</b> letter`;
-    return t + '.';
+    t += '.';
+    for (const r of S.reveal || []) t += ` Hint: <b>${r.c.toUpperCase()}</b> as the <b>${ordinal(r.p + 1)}</b> letter.`;
+    return t;
   }
 
   function renderBoard(animate) {
@@ -428,7 +438,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
       const f = fixedAt(i);
       const ch = f ? f.c : (out[i] || '');
       const cls = ['tile'];
-      if (f) cls.push('fixed'); else if (ch) cls.push('on');
+      if (f) cls.push((S.reveal || []).includes(f) ? 'reveal' : 'fixed'); else if (ch) cls.push('on');
       if (!f && i === cur && S.playing) cls.push('cur');
       html += `<div class="${cls.join(' ')}">${ch}</div>`;
     }
@@ -522,7 +532,37 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     if (S.lock) return; // the clock pauses while a correct answer is shown
     S.left--;
     renderStats();
-    if (S.left <= 0) end(true);
+    if (S.left <= 0) return end(true);
+    maybeReveal();
+  }
+
+  // Reveal letters of one real, unused answer, so the hints always lead to a word that works.
+  function maybeReveal() {
+    if (!revealOn()) return;
+    const want = REVEAL_AT.filter(t => S.left <= t).length;
+    let added = false;
+    while (S.reveal.length < want) {
+      if (!S.revealWord) {
+        const ok = w => fits(w, S.len, S.fixed) && !S.used.has(w);
+        let pool = S.level === 'easy' ? P.easy.list.filter(ok) : P.advanced.list.filter(ok);
+        if (!pool.length) pool = P.hard.list.filter(ok);
+        if (!pool.length) return;
+        S.revealWord = S.level === 'easy'
+          ? pool.reduce((a, b) => (P.easy.freq.get(b) > P.easy.freq.get(a) ? b : a)) // the most-used answer
+          : pool[rand(pool.length)];
+      }
+      const open = [...Array(S.len).keys()].filter(p => !fixedAt(p));
+      if (!open.length) return;
+      const p = open[rand(open.length)];
+      S.reveal.push({ p, c: S.revealWord[p] });
+      added = true;
+    }
+    if (added) {
+      const r = S.reveal[S.reveal.length - 1];
+      say(`Hint: the ${ordinal(r.p + 1)} letter is ${r.c.toUpperCase()}.`, 'alert');
+      els.rule.innerHTML = boardText();
+      renderTiles();
+    }
   }
 
   function end(timedOut) {
