@@ -1,12 +1,16 @@
 # Letter Board
 
+## ▶ [Play now: peterpppp1111.github.io/letter-board](https://peterpppp1111.github.io/letter-board/)
+
+Jump straight to a mode: [Sprint](https://peterpppp1111.github.io/letter-board/#sprint) · [Survival](https://peterpppp1111.github.io/letter-board/#survival)
+
 An English word game in the browser. The board shows a word length and a letter, and you type any real English word that fits.
 
 ## Modes
 
 | Mode | Goal | Timer | Scoring |
 |---|---|---|---|
-| **Sprint** (`#sprint`) | Score as many points as you can | 60 seconds for the whole round | 1 point per letter. Unlimited skips |
+| **Sprint** (`#sprint`) | Score as many points as you can | 90 seconds for the whole round | 1 point per letter. Unlimited skips |
 | **Survival** (`#survival`) | Keep going as long as you can | A time limit per word (set by difficulty), reset after each correct answer | 1 point per word. Running out of time ends the game |
 
 ## Difficulty

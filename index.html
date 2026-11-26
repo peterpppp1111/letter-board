@@ -167,7 +167,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   </header>
 
   <nav class="modes" aria-label="Game mode">
-    <a href="#sprint" data-mode="sprint"><b>Sprint</b><span>Most points in 60 seconds</span></a>
+    <a href="#sprint" data-mode="sprint"><b>Sprint</b><span>Most points in 90 seconds</span></a>
     <a href="#survival" data-mode="survival"><b>Survival</b><span>15 seconds for every word</span></a>
   </nav>
 
@@ -175,7 +175,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     <div class="status">
       <div class="stat"><span class="k">Question</span><span class="v" id="qnum">0</span></div>
       <div class="stat"><span class="k" id="scoreLabel">Score</span><span class="v" id="score">0</span></div>
-      <div class="stat"><span class="k">Time</span><span class="v" id="time">60</span></div>
+      <div class="stat"><span class="k">Time</span><span class="v" id="time">90</span></div>
       <div class="stat"><span class="k">Best</span><span class="v" id="best">0</span></div>
     </div>
 
@@ -219,7 +219,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 <script>
 (() => {
   const MODES = {
-    sprint:   { perWord: false, freeSkips: true,  scoreLabel: 'Score', bestUnit: 'points', start: 'Start 60-second round' },
+    sprint:   { perWord: false, freeSkips: true,  scoreLabel: 'Score', bestUnit: 'points', start: 'Start 90-second round' },
     survival: { perWord: true,  freeSkips: false, scoreLabel: 'Words', bestUnit: 'words',  start: 'Start survival' },
   };
   // Each level deals boards by picking one random word from its list and reading its length and letter,
@@ -229,7 +229,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
     advanced: { survival: 20, note: 'Boards follow the 30,000-word everyday list. Questions 1–5 use up to 5 letters, 6–10 up to 6, 11–15 up to 7, then anything from 3 to 9.' },
     hard:     { survival: 15, note: 'Boards follow all 72,000 accepted words, rare ones included, so long words come up most.' },
   };
-  const SPRINT_TIME = 60;
+  const SPRINT_TIME = 90;
   const TWO_LETTERS_AFTER = 20; // questions 1–20 give the first letter; from question 21 also a second letter at a random position
   const SKIP_EVERY = 10;     // every 10 correct answers earn one skip
   const DOUBLE_ENTER_MS = 1500; // pressing Enter twice on an empty box within this time uses a skip
@@ -264,7 +264,7 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   const bestKey = () => `lb-best-${S.mode}-${S.level}`;
   const ordinal = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
   const helpText = () => (S.mode === 'sprint'
-    ? 'Score one point per letter in 60 seconds.'
+    ? `Score one point per letter in ${SPRINT_TIME} seconds.`
     : `Answer each board within ${roundTime()} seconds.`) +
     ' Questions 1–20 give the first letter; from question 21 you also get a second letter somewhere in the word.' +
     (S.mode === 'sprint'
