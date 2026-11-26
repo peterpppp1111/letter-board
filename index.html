@@ -469,19 +469,24 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   }
 
   // Suggest answers the player is likely to know: the most-used words on Easy, everyday words otherwise.
+  // Suggested answers match every letter on the tiles, hint letters included.
   function hintsFor() {
-    const ok = w => fits(w, S.len, S.fixed) && !S.used.has(w);
+    const ok = w => fits(w, S.len, shown()) && !S.used.has(w);
     const shuffle = a => a.sort(() => Math.random() - .5);
     let pick;
     if (S.level === 'easy') {
       const f = P.easy.freq;
-      pick = P.easy.list.filter(ok).sort((a, b) => f.get(b) - f.get(a)).slice(0, 3);
+      pick = P.easy.list.filter(ok).sort((a, b) => f.get(b) - f.get(a));
+      if (pick.length < 3) pick = pick.concat(shuffle(P.advanced.list.filter(w => ok(w) && !pick.includes(w))));
+      if (pick.length < 3) pick = pick.concat(shuffle(P.hard.list.filter(w => ok(w) && !pick.includes(w))));
     } else {
       const everyday = shuffle(P.advanced.list.filter(ok));
-      pick = everyday.length >= 3 ? everyday.slice(0, 3)
-        : everyday.concat(shuffle(P.hard.list.filter(w => ok(w) && !P.commonSet.has(w)))).slice(0, 3);
+      pick = everyday.length >= 3 ? everyday
+        : everyday.concat(shuffle(P.hard.list.filter(w => ok(w) && !P.commonSet.has(w))));
     }
-    return pick.map(x => x.toUpperCase());
+    // the word the hint letters came from always fits, so list it first
+    if (S.revealWord && ok(S.revealWord)) pick = [S.revealWord, ...pick.filter(w => w !== S.revealWord)];
+    return pick.slice(0, 3).map(x => x.toUpperCase());
   }
 
   // ---------- play ----------
